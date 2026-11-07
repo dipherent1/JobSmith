@@ -1,7 +1,8 @@
 from functools import lru_cache
 from typing import Literal
+from urllib.parse import quote_plus
 
-from pydantic import SecretStr
+from pydantic import SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -18,7 +19,12 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     log_format: Literal["json", "console"] = "json"
 
-    database_url: str = "postgresql+asyncpg://jobsmith:jobsmith@localhost:5432/jobsmith"
+    postgres_user: str = "jobsmith"
+    postgres_password: SecretStr = SecretStr("jobsmith")
+    postgres_db: str = "jobsmith"
+    postgres_host: str = "localhost"
+    postgres_port: int = 5432
+    database_url: str = ""
 
     openrouter_api_key: SecretStr | None = None
     openrouter_decisions_url: str = "https://openrouter.ai/api/alpha/decisions"
@@ -45,6 +51,16 @@ class Settings(BaseSettings):
 
     cors_origins: str = "http://localhost:3000"
     trace_id_header: str = "X-Trace-ID"
+
+    @model_validator(mode="after")
+    def resolve_database_url(self) -> "Settings":
+        if not self.database_url:
+            password = quote_plus(self.postgres_password.get_secret_value())
+            self.database_url = (
+                f"postgresql+asyncpg://{self.postgres_user}:{password}"
+                f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
+            )
+        return self
 
     @property
     def cors_origin_list(self) -> list[str]:
